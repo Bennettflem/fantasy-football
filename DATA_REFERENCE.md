@@ -47,9 +47,11 @@ Each season produces its own set of files, prefixed with the year (for example `
 
 This is the most reliable way to track a person across seasons, since team names change.
 
+**Tracking people across seasons:** almost every owner renames their team every year, and team IDs are only stable within this league's ESPN history. Always group "league history for person X" by owner name (or `member_id` / `owner_ids`), never by team name. Every file that names a team also names its owner, so filter on the owner column.
+
 ## YYYY_teams.csv
 
-**Identity:** `season`, `team_id`, `team_name`, `team_abbrev`, `owners` (real names, joined with "&" for co-owned teams), `division`.
+**Identity:** `season`, `team_id`, `team_name`, `team_abbrev`, `owners` (real names, joined with "&" for co-owned teams), `owner_ids` (ESPN member IDs, joined with "|"; matches `member_id` in the members file), `division`.
 
 **Record:** `wins`, `losses`, `ties`, `points_for`, `points_against`, `streak` (e.g. "WIN 3").
 
@@ -71,7 +73,7 @@ Every matchup in the season's schedule, including playoff and consolation games.
 | `nfl_weeks` | NFL week(s) the matchup covers; two-week playoff rounds show as e.g. `15/16` |
 | `game_type` | `regular_season` or `postseason` |
 | `playoff_tier` | `NONE`, `WINNERS_BRACKET`, `LOSERS_CONSOLATION_LADDER`, or similar ESPN labels |
-| `status` | `final` or `not_final` |
+| `status` | `final`, `not_final`, or `bye` (a playoff bye; no game was played) |
 | `home_team_id`, `home_team`, `home_owner`, `home_score` | Home side |
 | `away_team_id`, `away_team`, `away_owner`, `away_score` | Away side (`BYE` for playoff byes) |
 | `winner` | `HOME`, `AWAY`, `TIE`, or `UNDECIDED` |
@@ -104,11 +106,12 @@ One row per player involved in a move. A trade of two players for one produces t
 | `proposed_date`, `processed_date` | When it was submitted and when it went through |
 | `transaction_type` | `FREEAGENT`, `WAIVER`, `WAIVER_ERROR` (failed claim), `TRADE_PROPOSAL`, `TRADE_ACCEPT`, `TRADE_DECLINE`, `TRADE_VETO`, `TRADE_UPHOLD`, `TRADE_ERROR` |
 | `status` | e.g. `EXECUTED`, `CANCELED`, `FAILED_...`, `VETOED`, `PENDING` |
-| `initiating_team` | Team that made the move or proposed the trade |
+| `initiating_team`, `initiating_owner` | Team (and its owner) that made the move or proposed the trade |
 | `faab_bid` | FAAB amount bid, including losing bids |
 | `item_type` | `ADD`, `DROP`, or `TRADE` |
 | `player`, `player_id` | Player moved |
 | `from_team`, `to_team` | Where the player came from and went ("Free Agency/Waivers" for the pool) |
+| `from_owner`, `to_owner` | Owners of those teams (blank for the free-agent pool) |
 
 This file supports questions like who overpaid on waivers, which trades were proposed and rejected, and who was involved in vetoed deals. Lineup changes and IR moves are deliberately excluded because they add thousands of low-value rows.
 
@@ -127,7 +130,7 @@ The largest and most detailed file: every player on every roster for every week 
 | Column | Meaning |
 |---|---|
 | `nfl_week`, `matchup_period`, `is_playoff` | When |
-| `team_id`, `team`, `owner`, `opponent` | Whose lineup and who they played |
+| `team_id`, `team`, `owner`, `opponent`, `opponent_owner` | Whose lineup and who they played |
 | `team_week_score`, `team_week_projected` | The team's total and projection for the matchup |
 | `player`, `player_id`, `position`, `nfl_team` | The player |
 | `lineup_slot` | Slot used (QB, RB, FLEX-type slots, D/ST, K, `BE` = bench, `IR`) |
@@ -146,7 +149,9 @@ For two-week playoff rounds, each NFL week has its own rows, and `team_week_scor
 
 ## YYYY_message_board.json
 
-Posts from the league's ESPN message board, saved in ESPN's raw format. It may be empty if the league doesn't use the board, and its structure isn't documented by ESPN.
+Posts from the league's ESPN message board, saved in ESPN's raw format. Its structure isn't documented by ESPN.
+
+ESPN only serves the board for the current season, so only the current season's file exists; 2024 and 2025 have no message board file. Each topic has a `type`: `CHAT` and `CHAT_ALL_MEMBERS` are league chat, `CHAT_DIRECT_MESSAGE` is a direct message, and `ACTIVITY_*` topics are automated notices (transactions, settings changes) that duplicate the transactions and settings files.
 
 ## What the export does NOT capture
 

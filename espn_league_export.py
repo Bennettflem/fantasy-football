@@ -128,6 +128,11 @@ def owner_names(team):
     return " & ".join(n for n in names if n)
 
 
+def owner_ids(team):
+    owners = getattr(team, "owners", None) or []
+    return "|".join(o.get("id", "") for o in owners if isinstance(o, dict))
+
+
 def team_lookup(league):
     return {t.team_id: t for t in league.teams}
 
@@ -197,6 +202,7 @@ def export_teams(league, year, out):
             "team_name": t.team_name,
             "team_abbrev": t.team_abbrev,
             "owners": owner_names(t),
+            "owner_ids": owner_ids(t),
             "division": t.division_name,
             "wins": t.wins,
             "losses": t.losses,
@@ -251,7 +257,7 @@ def export_matchups(league, year, out):
             "nfl_weeks": "/".join(str(w) for w in periods.get(str(mp), periods.get(mp, []))),
             "game_type": "regular_season" if (mp or 0) <= reg_count else "postseason",
             "playoff_tier": tier,  # e.g. WINNERS_BRACKET, LOSERS_CONSOLATION_LADDER, NONE
-            "status": "final" if winner != "UNDECIDED" else "not_final",
+            "status": "bye" if not a_t else ("final" if winner != "UNDECIDED" else "not_final"),
             "home_team_id": h_id,
             "home_team": h_t.team_name if h_t else "",
             "home_owner": owner_names(h_t) if h_t else "",
@@ -292,7 +298,9 @@ def export_weekly_lineups(league, year, out):
             for team, score, proj, lineup, opp in sides:
                 if not team or isinstance(team, int):
                     continue
-                opp_name = opp.team_name if opp and not isinstance(opp, int) else "BYE"
+                opp_real = opp if opp and not isinstance(opp, int) else None
+                opp_name = opp_real.team_name if opp_real else "BYE"
+                opp_owner = owner_names(opp_real) if opp_real else ""
                 for p in lineup:
                     slot = getattr(p, "slot_position", "")
                     rows.append({
@@ -304,6 +312,7 @@ def export_weekly_lineups(league, year, out):
                         "team": team.team_name,
                         "owner": owner_names(team),
                         "opponent": opp_name,
+                        "opponent_owner": opp_owner,
                         "team_week_score": score,
                         "team_week_projected": round(proj, 2) if isinstance(proj, (int, float)) else proj,
                         "player": p.name,
@@ -410,6 +419,10 @@ def export_transactions(league, year, out):
         t = teams.get(tid)
         return t.team_name if t else ("Free Agency/Waivers" if tid in (0, -1, None) else str(tid))
 
+    def towner(tid):
+        t = teams.get(tid)
+        return owner_names(t) if t else ""
+
     for week in range(0, last_week + 1):  # week 0 = preseason moves
         headers = {"x-fantasy-filter": json.dumps({"transactions": {"filterType": {"value": TXN_TYPES}}})}
         data = safe(lambda: league.espn_request.league_get(
@@ -434,12 +447,15 @@ def export_transactions(league, year, out):
                     "transaction_type": tx.get("type"),
                     "status": tx.get("status"),
                     "initiating_team": tname(tx.get("teamId")),
+                    "initiating_owner": towner(tx.get("teamId")),
                     "faab_bid": tx.get("bidAmount", ""),
                     "item_type": it.get("type"),  # ADD, DROP, TRADE
                     "player": pmap.get(it.get("playerId"), it.get("playerId")),
                     "player_id": it.get("playerId"),
                     "from_team": tname(it.get("fromTeamId")),
+                    "from_owner": towner(it.get("fromTeamId")),
                     "to_team": tname(it.get("toTeamId")),
+                    "to_owner": towner(it.get("toTeamId")),
                 })
 
     if not rows:
@@ -460,6 +476,7 @@ def export_transactions(league, year, out):
                         "transaction_type": action,
                         "status": "EXECUTED",
                         "initiating_team": getattr(team, "team_name", str(team)),
+                        "initiating_owner": owner_names(team) if not isinstance(team, (int, str)) else "",
                         "faab_bid": bid,
                         "player": getattr(player, "name", str(player)),
                         "player_id": getattr(player, "playerId", ""),
