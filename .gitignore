@@ -1,0 +1,12 @@
+# Exported league data (personal league info; regenerate with the script)
+league_data/
+
+# ESPN credentials — never commit these
+.env
+set_env.ps1
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
