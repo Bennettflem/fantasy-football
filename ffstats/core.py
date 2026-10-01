@@ -244,6 +244,38 @@ def rank_scale(s: pd.Series, higher_is_better: bool = True) -> pd.Series:
     return (r - 1) / (n - 1) if n > 1 else pd.Series(1.0, index=s.index)
 
 
+def scoring_profile(season: Season, ident: Identity, through_week: int | None = None,
+                    priors: list[Season] | None = None) -> pd.DataFrame:
+    """Per-owner weekly scoring mean and spread, shrunk toward a baseline when the sample is thin.
+
+    Early in a season a team has a game or two, so the raw average is noise. Each owner's mean is
+    pulled toward their prior-season average (or the league average when there is no history),
+    which keeps week-2 projections honest.
+    """
+    cur = weekly_scores(season, ident, through_week=through_week)
+    if cur.empty:
+        return pd.DataFrame(columns=["mu", "sigma", "games"])
+    prior = pd.concat([weekly_scores(p, ident) for p in priors], ignore_index=True) if priors else pd.DataFrame()
+    prior_mu = prior.groupby("owner_id").points.mean().to_dict() if not prior.empty else {}
+    league_mu = float(cur.points.mean())
+    pool = pd.concat([cur, prior], ignore_index=True) if not prior.empty else cur
+    league_sd = float(pool.points.std(ddof=0)) or 15.0
+    K = 4.0            # games of prior belief
+    CARRYOVER = 0.5    # how much of last year's scoring edge survives a new draft
+
+    rows = {}
+    for oid, g in cur.groupby("owner_id"):
+        n = len(g)
+        # Rosters turn over every draft, so only part of an owner's history carries forward.
+        base = league_mu + CARRYOVER * (float(prior_mu[oid]) - league_mu) if oid in prior_mu else league_mu
+        mu = (n * float(g.points.mean()) + K * base) / (n + K)
+        mine = pool[pool.owner_id == oid].points
+        sd = float(mine.std(ddof=0)) if len(mine) >= 4 else float("nan")
+        sigma = league_sd if pd.isna(sd) or sd <= 0 else (len(mine) * sd + K * league_sd) / (len(mine) + K)
+        rows[oid] = {"mu": mu, "sigma": max(sigma, 5.0), "games": n}
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
 def default_week(season: Season, week: int | None, regular_only: bool = True) -> int:
     w = week if week is not None else last_completed_week(season, regular_only)
     if w < 1:

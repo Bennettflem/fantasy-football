@@ -433,22 +433,29 @@ def export_transactions(league, year, out):
             if tx.get("id") in seen:
                 continue
             seen.add(tx.get("id"))
-            items = tx.get("items", []) or []
+            items = [it for it in (tx.get("items") or []) if it.get("type") != "LINEUP"]
+            base = {
+                "season": year,
+                "transaction_id": tx.get("id"),
+                "related_transaction_id": tx.get("relatedTransactionId", ""),
+                "nfl_week": tx.get("scoringPeriodId"),
+                "proposed_date": ms_to_iso(tx.get("proposedDate")),
+                "processed_date": ms_to_iso(tx.get("processDate")),
+                "transaction_type": tx.get("type"),
+                "status": tx.get("status"),
+                "initiating_team": tname(tx.get("teamId")),
+                "initiating_owner": towner(tx.get("teamId")),
+                "faab_bid": tx.get("bidAmount", ""),
+            }
+            blank = {"item_type": "", "player": "", "player_id": "", "from_team": "",
+                     "from_owner": "", "to_team": "", "to_owner": ""}
+            # Veto and uphold votes carry no items, so a row-per-item loop would drop them entirely
+            # and the league's veto history would never appear anywhere.
+            if not items and str(tx.get("type", "")).startswith("TRADE"):
+                rows.append({**base, **blank})
             for it in items:
-                if it.get("type") == "LINEUP":
-                    continue
                 rows.append({
-                    "season": year,
-                    "transaction_id": tx.get("id"),
-                    "related_transaction_id": tx.get("relatedTransactionId", ""),
-                    "nfl_week": tx.get("scoringPeriodId"),
-                    "proposed_date": ms_to_iso(tx.get("proposedDate")),
-                    "processed_date": ms_to_iso(tx.get("processDate")),
-                    "transaction_type": tx.get("type"),
-                    "status": tx.get("status"),
-                    "initiating_team": tname(tx.get("teamId")),
-                    "initiating_owner": towner(tx.get("teamId")),
-                    "faab_bid": tx.get("bidAmount", ""),
+                    **base,
                     "item_type": it.get("type"),  # ADD, DROP, TRADE
                     "player": pmap.get(it.get("playerId"), it.get("playerId")),
                     "player_id": it.get("playerId"),

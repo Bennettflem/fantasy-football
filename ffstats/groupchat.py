@@ -53,7 +53,10 @@ def _power(seasons, year, week, ident) -> list[str]:
         rank = int(r["rank"])
         mv = r.movement
         move = "" if pd.isna(mv) or int(mv) == 0 else (f" ▲{int(mv)}" if mv > 0 else f" ▼{-int(mv)}")
-        lines.append(f"{MEDALS.get(rank, f'{rank}.')} {ident.short(oid)} ({ident.team(oid, year)}) {r.record}{move}")
+        if lines:
+            lines.append("")  # blank line between teams; the why lines run long on a phone
+        lines.append(f"{MEDALS.get(rank, f'{rank}.')} {ident.short(oid)} ({ident.team(oid, year)}) "
+                     f"{r.record}{move} — {r.why}")
     return lines
 
 

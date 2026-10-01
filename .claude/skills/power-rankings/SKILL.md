@@ -11,7 +11,9 @@ Set-Location C:\Users\benne\personal-workspace\fantasy-football; python -m ffsta
 
 Options: `--season 2025`, `--week 8` (rank through that week), `--json` (component breakdown per team).
 
-The output is a markdown table: rank, movement since last week, team (owner), score 0-100, record, points per game, all-play record, and the top driver of that team's score. Weights are listed under the table; early in the season (weeks 1-3) owner history counts more because there's little current data.
+The output is a markdown table: rank, movement since last week, team (owner), score 0-100, record, points per game, all-play record, and a "Why" line for that team. Weights are listed under the table; early in the season (weeks 1-3) owner history counts more because there's little current data.
+
+The Why line is picked from the strongest claim a team actually qualifies for (juggernaut, scoring, lucky/unlucky, fraud, hot/cold streak, riser/faller, bench points, lineup efficiency, waiver build, points against, owner history). At most two teams share a reason in a week, and the second one gets a different phrasing, so no two teams ever read alike. Claims that need a sample (luck, fraud, bench, waiver, points against) are suppressed in the first weeks, so early rankings lean on generic rank-tier lines - that's expected, not a bug.
 
 Presenting it:
 - Show the table as-is, then add 3-5 sentences of commentary: who moved and why, the biggest gap between record and power rank (lucky or unlucky teams), and anything surprising.

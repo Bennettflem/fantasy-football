@@ -7,6 +7,7 @@ from .data import Season
 from .identity import Identity
 from .power import profile
 from .render import signed, table
+from .trades import infer_trades
 
 TOPICS = ["standings", "h2h", "luck", "streaks", "records", "draft", "waivers", "lineups", "trades"]
 
@@ -212,18 +213,33 @@ def stat_lineups(seasons, ident) -> str:
 
 
 def stat_trades(seasons, ident) -> str:
+    # Completed trades come from roster movement, not the transaction log: ESPN purges the record
+    # that holds the players, so the log undercounts badly. See ffstats/trades.py.
+    done: dict[str, int] = {}
+    sent: dict[str, int] = {}
+    for y, s in sorted(seasons.items()):
+        legs = infer_trades(s, ident)
+        if legs.empty:
+            continue
+        for _, g in legs.groupby("trade_id"):
+            for oid in set(g.from_owner) | set(g.to_owner):
+                done[oid] = done.get(oid, 0) + 1
+            for oid, gg in g.groupby("from_owner"):
+                sent[oid] = sent.get(oid, 0) + len(gg)
+
     rows = []
     for oid in ident.owners():
-        done = proposed = vetoed = 0
+        proposed = 0
         for y, s in sorted(seasons.items()):
             tx = s.transactions
             if tx.empty or "initiating_owner" not in tx.columns:
                 continue
             team = ident.team(oid, y)
-            mine = tx[(tx.initiating_team == team) | (tx.from_team == team) | (tx.to_team == team)]
-            done += mine[(mine.transaction_type == "TRADE_ACCEPT") & (mine.status == "EXECUTED")].transaction_id.nunique()
-            proposed += mine[(mine.transaction_type == "TRADE_PROPOSAL") & (mine.initiating_team == team)].transaction_id.nunique()
-            vetoed += mine[mine.transaction_type == "TRADE_VETO"].transaction_id.nunique()
-        rows.append({"Owner": ident.label(oid), "Trades completed": done, "Proposals sent": proposed, "Vetoed": vetoed})
+            proposed += tx[(tx.transaction_type == "TRADE_PROPOSAL")
+                           & (tx.initiating_team == team)].transaction_id.nunique()
+        rows.append({"Owner": ident.label(oid), "Trades completed": done.get(oid, 0),
+                     "Players sent away": sent.get(oid, 0), "Proposals sent": proposed})
     rows.sort(key=lambda r: (-r["Trades completed"], -r["Proposals sent"]))
-    return "## Trade activity\n\n" + table(rows)
+    return ("## Trade activity\n\n" + table(rows)
+            + "\n\n_Completed trades are reconstructed from roster movement; ESPN's transaction log "
+              "loses the player legs once a trade resolves, so it undercounts._")
