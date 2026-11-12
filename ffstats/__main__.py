@@ -9,6 +9,7 @@ import pandas as pd
 from .beer_mile import beer_mile_markdown, beer_mile_odds
 from .data import load_all
 from .draft_grades import draft_grades, draft_grades_markdown
+from .eye_test import eye_test, eye_test_markdown
 from .groupchat import SECTIONS, group_chat
 from .identity import Identity
 from .league_stats import TOPICS, league_stats
@@ -41,6 +42,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="ffstats", description="League analytics from league_data/.")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("power-rankings", parents=[common])
+    sub.add_parser("eye-test", parents=[common], help="rank by wins, roster and defense - no all-play")
     sub.add_parser("beer-mile-odds", parents=[common])
     sub.add_parser("superlatives", parents=[common])
     sub.add_parser("league-news", parents=[common])
@@ -87,6 +89,10 @@ def main(argv=None):
             df = power_rankings(seasons, year, args.week, ident)
             print(json.dumps(df.reset_index().to_dict("records"), default=str, indent=1) if args.json
                   else power_markdown(df, season))
+        elif args.cmd == "eye-test":
+            df = eye_test(seasons, year, args.week, ident)
+            print(json.dumps(_records(df), default=str, indent=1) if args.json
+                  else eye_test_markdown(df, season))
         elif args.cmd == "beer-mile-odds":
             df = beer_mile_odds(seasons, year, args.week, ident)
             print(json.dumps(df.reset_index().to_dict("records"), default=str, indent=1) if args.json
