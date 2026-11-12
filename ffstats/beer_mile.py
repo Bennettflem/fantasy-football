@@ -6,7 +6,7 @@ import pandas as pd
 from .core import default_week, lineup_efficiency, rank_scale, record_str, standings, weekly_scores
 from .data import Season
 from .identity import Identity
-from .power import power_rankings, prior_seasons, profile
+from .power import power_rankings, prior_seasons
 from .render import pct, table
 
 REASONS = {
@@ -34,6 +34,15 @@ def american_odds(p: float) -> str:
     return f"+{int(o)}"
 
 
+def regular_season_rank(season: Season, ident: Identity) -> pd.Series:
+    """Finishing order by regular-season record, worst last. ESPN's `final_standing` is the
+    post-playoff placement, which drops the consolation bracket winner below teams that were
+    better all year - this league runs the beer mile on the regular-season loser, so that is
+    the only order that decides it."""
+    st = standings(weekly_scores(season, ident))
+    return pd.Series(dtype=int) if st.empty else st["rank"]
+
+
 def beer_mile_odds(seasons: dict[int, Season], year: int, week: int | None = None,
                    ident: Identity | None = None) -> pd.DataFrame:
     ident = ident or Identity(seasons)
@@ -53,13 +62,11 @@ def beer_mile_odds(seasons: dict[int, Season], year: int, week: int | None = Non
     merged = losses.merge(eff, on=["week", "owner_id"], how="left")
     chw = merged[merged.optimal >= merged.opp_points].groupby("owner_id").size()
     comp["chw"] = rank_scale(chw.reindex(st.index).fillna(0))
-    prior = [profile(s, ident) for s in prior_seasons(seasons, year)]
+    prior = [regular_season_rank(s, ident) for s in prior_seasons(seasons, year)]
     prior = [p for p in prior if not p.empty]
     if prior:
-        hist = pd.concat(prior)
-        last_places = pd.concat([(p.final_standing == seasons[int(p.year.iloc[0])].team_count).astype(int)
-                                 for p in prior]).groupby(level=0).sum()
-        curse = hist.groupby(level=0).final_standing.mean() + last_places
+        last_places = pd.concat([(p == p.max()).astype(int) for p in prior]).groupby(level=0).sum()
+        curse = pd.concat(prior).groupby(level=0).mean() + last_places
         comp["curse"] = rank_scale(curse.reindex(st.index))
     else:
         comp["curse"] = 0.5
@@ -80,10 +87,9 @@ def beer_mile_odds(seasons: dict[int, Season], year: int, week: int | None = Non
     out.attrs["week"] = W
     out.attrs["official"] = None
     if season.is_complete:
-        last = season.teams[season.teams.final_standing == season.team_count]
-        if len(last):
-            oid = ident.team_owner.get((year, int(last.team_id.iloc[0])), "")
-            out.attrs["official"] = ident.label(oid, year)
+        order = regular_season_rank(season, ident)
+        if not order.empty:
+            out.attrs["official"] = ident.label(str(order.idxmax()), year)
     return out.sort_values("prob", ascending=False)
 
 
@@ -95,5 +101,5 @@ def beer_mile_markdown(df: pd.DataFrame, season: Season) -> str:
              "_Misery = 60% inverse power ranking + 40% bad-luck factor (schedule luck, points against, "
              "close losses, games lost to bench points, history). Odds are softmax over misery._"]
     if df.attrs.get("official"):
-        lines += ["", f"**OFFICIAL:** {df.attrs['official']} finished last (ESPN final standing) and runs the beer mile."]
+        lines += ["", f"**OFFICIAL:** {df.attrs['official']} finished last in the regular season and runs the beer mile."]
     return "\n".join(lines)
