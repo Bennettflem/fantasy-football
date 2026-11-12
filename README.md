@@ -64,7 +64,9 @@ Scores don't change between Tuesday and the next game, so once a week is enough.
 
 Every command accepts `--season YYYY`, `--week N`, and `--json`. Defaults are the latest season and the last completed week.
 
-**Power rankings** blend six rank-scaled components: all-play win% (30%), points per game (20%), record (15%), last three weeks (15%), roster management (waiver points + lineup efficiency, 10%), and owner history (prior seasons' second-half turnarounds and waiver usage, 10%; 25% in weeks 1-3).
+**Power rankings** blend six rank-scaled components: **last week 30%**, all-play win% 25%, points per game 15%, record 10%, roster management (waiver points + lineup efficiency) 10%, owner history (prior seasons' second-half turnarounds and waiver usage) 10%. In weeks 1-3 the sample is thin, so last week drops to 15%, all-play rises to 30%, points per game to 20% and owner history to 15%. Exact ties break on points per game.
+
+Recent form is the heaviest input on purpose - these are read as "who is hot now", not as a forecast. The one-week window was picked by measurement: of every window and weight tried in `python -m ffstats backtest`, last-week-at-30% scored best on next-week accuracy (59.3%), ahead of the older three-week-at-15% setup (57.8%) and well ahead of a two-week window (53.3%).
 
 **Beer mile odds** = softmax over a misery score that is 60% inverse power ranking and 40% bad luck (schedule luck, points against, close losses, games a perfect lineup would have won, and prior-season finishes).
 

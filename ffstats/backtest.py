@@ -18,7 +18,7 @@ import pandas as pd
 from .core import all_play, lineup_efficiency, rank_scale, standings, waiver_share, weekly_scores
 from .data import Season
 from .identity import Identity
-from .power import WEIGHTS_EARLY, WEIGHTS_LATE, history_factors
+from .power import RECENT_WEEKS, WEIGHTS_EARLY, WEIGHTS_LATE, history_factors
 from .render import table
 
 MIN_WEEK = 2          # a one-game ranking predicts nothing; start once there are two
@@ -69,7 +69,8 @@ def projected_strength(season: Season, ident: Identity, week: int) -> pd.Series:
 # --- schemes -------------------------------------------------------------------------------
 # Each returns a score per owner_id built only from information available at the end of week W.
 
-def _weighted(seasons, year, ident, W, weights, half_life, proj_weight=0.0) -> pd.Series:
+def _weighted(seasons, year, ident, W, weights, half_life, proj_weight=0.0,
+              recent_weeks: int = RECENT_WEEKS) -> pd.Series:
     """The shipped component structure, with recency and projection made adjustable."""
     season = seasons[year]
     scores = weekly_scores(season, ident, through_week=W)
@@ -80,7 +81,7 @@ def _weighted(seasons, year, ident, W, weights, half_life, proj_weight=0.0) -> p
     comp["all_play"] = rank_scale(decayed_mean(ap, "ap_pct", W, half_life).reindex(st.index))
     comp["pf"] = rank_scale(decayed_mean(scores, "points", W, half_life).reindex(st.index))
     comp["record"] = rank_scale(st.win_pct + st.PF / 1e6)
-    recent = ap[ap.week > W - 3].groupby("owner_id").ap_pct.mean()
+    recent = ap[ap.week > W - recent_weeks].groupby("owner_id").ap_pct.mean()
     comp["recent"] = rank_scale(recent.reindex(st.index))
     eff = lineup_efficiency(season, ident, W).groupby("owner_id").efficiency.mean()
     comp["roster"] = (rank_scale(waiver_share(season, ident, W).reindex(st.index))
@@ -138,6 +139,29 @@ def scheme_projection(proj_weight: float) -> Scheme:
     return f
 
 
+PREV_LATE = {"all_play": .30, "pf": .20, "record": .15, "recent": .15, "roster": .10, "history": .10}
+PREV_EARLY = {"all_play": .30, "pf": .20, "record": .10, "recent": .05, "roster": .10, "history": .25}
+
+
+def scheme_previous_config(seasons, year, ident, W) -> pd.Series:
+    """The weights and 3-week window shipped before recent form was made the heaviest input."""
+    return _weighted(seasons, year, ident, W, PREV_EARLY if W <= 3 else PREV_LATE, None,
+                     recent_weeks=3)
+
+
+def scheme_recent_window(weeks: int, weight: float) -> Scheme:
+    """Current structure with the recency window and its weight both pinned, for tuning."""
+    def f(seasons, year, ident, W):
+        base = dict(WEIGHTS_EARLY if W <= 3 else WEIGHTS_LATE)
+        spare = 1.0 - weight
+        rest = sum(v for k, v in base.items() if k != "recent")
+        w = {k: v / rest * spare for k, v in base.items() if k != "recent"}
+        w["recent"] = weight
+        return _weighted(seasons, year, ident, W, w, None, recent_weeks=weeks)
+    f.__name__ = f"recent{weeks}_at{int(weight * 100)}"
+    return f
+
+
 def scheme_pf_only(seasons, year, ident, W) -> pd.Series:
     """Baseline: season points per game. If nothing beats this, the machinery is decoration."""
     return standings(weekly_scores(seasons[year], ident, through_week=W)).pf_pg
@@ -165,6 +189,12 @@ def scheme_espn_projection(seasons, year, ident, W) -> pd.Series:
 
 SCHEMES: dict[str, Scheme] = {
     "current (shipped)": scheme_current,
+    "previous config (3wk @15%)": scheme_previous_config,
+    "last 2wk @ 15%": scheme_recent_window(2, .15),
+    "last 2wk @ 30%": scheme_recent_window(2, .30),
+    "last 2wk @ 45%": scheme_recent_window(2, .45),
+    "last 3wk @ 30%": scheme_recent_window(3, .30),
+    "last 1wk @ 30%": scheme_recent_window(1, .30),
     "early weights only": scheme_flat_early,
     "late weights only": scheme_flat_late,
     "decay hl=2": scheme_decay(2),
